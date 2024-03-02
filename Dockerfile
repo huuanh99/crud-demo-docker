@@ -1,30 +1,46 @@
-FROM php:7.4-fpm
+# Use an official PHP image with Apache as the base image.
+FROM php:8.2-apache
 
-# Install dependencies
-RUN apt-get update && apt-get install -y \
-    git \
-    unzip \
-    libzip-dev \
-    libonig-dev \
-    libxml2-dev
+# Set environment variables.
+ENV ACCEPT_EULA=Y
+LABEL maintainer="tranhuuanh00@gmail.com"
 
-RUN docker-php-ext-install pdo_mysql zip mbstring exif pcntl bcmath opcache
+# Install system dependencies.
+RUN apt-get update && apt-get install -y git wget gnupg vim unzip libxml2-dev libpng-dev libzip-dev libonig-dev default-mysql-client libldap2-dev\
+  && docker-php-ext-install mbstring dom gd zip pdo_mysql ldap mysqli\
+  && apt-get clean
 
-# Install Composer
+# Enable Apache modules required for Laravel.
+RUN a2enmod rewrite
+
+# Set the Apache document root
+ENV APACHE_DOCUMENT_ROOT /var/www/html/public
+
+# Update the default Apache site configuration
+COPY apache-config.conf /etc/apache2/sites-available/000-default.conf
+
+RUN a2ensite 000-default.conf
+
+
+# Install Composer globally.
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
-# Set working directory
+# Create a directory for your Laravel application.
 WORKDIR /var/www/html
 
-# Copy application files
-COPY . /var/www/html
+# Copy the Laravel application files into the container.
+COPY . .
 
-# Install dependencies
-RUN composer install --optimize-autoloader --no-dev
+ENV COMPOSER_ALLOW_SUPERUSER 1
 
-# Set permissions
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+# Install Laravel dependencies using Composer.
+RUN composer install --no-interaction --optimize-autoloader
 
-# Expose port 9000 and start php-fpm server
-EXPOSE 9000
-CMD ["php-fpm"]
+# Set permissions for Laravel.
+RUN chown -R www-data:www-data storage bootstrap/cache
+
+# Expose port 80 for Apache.
+EXPOSE 80
+
+# Start Apache web server.
+CMD ["apache2-foreground"]
